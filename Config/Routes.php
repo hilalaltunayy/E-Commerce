@@ -1,67 +1,93 @@
 <?php
 
+namespace Config;
+
+use CodeIgniter\Config\Services;
 use CodeIgniter\Router\RouteCollection;
 
 /**
  * @var RouteCollection $routes
  */
+$routes = Services::routes();
 
-// --- HERKESİN ERİŞEBİLECEĞİ ROTALAR (Açık Alan) ---
-$routes->get('/', 'Login::index'); 
-$routes->get('login', 'Login::index'); 
+// ----------------------------------------------------
+// AÇIK ALAN – HERKES ERİŞEBİLİR
+// ----------------------------------------------------
+$routes->get('/', 'Login::index');
+$routes->get('login', 'Login::index');
 $routes->post('login/auth', 'Login::auth');
-$routes->get('register', 'Register::index');      
-$routes->post('register/save', 'Register::save'); 
+
+$routes->get('register', 'Register::index');
+$routes->post('register/save', 'Register::save');
+
 $routes->get('logout', 'Logout::index');
 
-// --- SADECE GİRİŞ YAPANLARIN ERİŞEBİLECEĞİ ROTALAR (Korumalı Alan) ---
-// 'auth' filtresi sayesinde isLoggedIn session'ı olmayanlar bu gruba sızamaz.
-$routes->group('', ['filter' => 'auth'], function($routes) {
-    
-    // Dashboard (Ana Sayfa)
+// ----------------------------------------------------
+// KORUMALI ALAN – SADECE GİRİŞ YAPANLAR (auth)
+// ----------------------------------------------------
+$routes->group('', ['filter' => 'auth'], function ($routes) {
+
+    // Dashboard
     $routes->get('dashboard_anasayfa', 'Home::index');
 
-    // Ürün Yönetimi
+    // ------------------------------------------------
+    // ÜRÜN YÖNETİMİ (login olan herkes – mevcut davranışı bozmadık)
+    // ------------------------------------------------
     $routes->get('products', 'ProductController::index');
-    $routes->get('products/new', 'ProductController::new'); 
-    $routes->get('products/detail/(:num)', 'ProductController::detail/$1'); 
+    $routes->get('products/new', 'ProductController::new');
+    $routes->get('products/detail/(:num)', 'ProductController::detail/$1');
     $routes->post('products/save', 'ProductController::save');
     $routes->get('products/delete/(:num)', 'ProductController::delete/$1');
-    
+
+    // Stok
+    $routes->get('products/stock-management', 'ProductController::stock_management');
+
+    // Siparişler (liste / oluşturma)
+    $routes->get('orders', 'OrderController::index');
+    $routes->post('orders/create', 'OrderController::create');
 });
 
-// --- ÜRÜN LİSTELEME VE FİLTRELEME ROTALARI ---
+// ----------------------------------------------------
+// ÜRÜN LİSTELEME & FİLTRELEME (AÇIK ALAN)
+// ----------------------------------------------------
 
-// 1. ADIM: EN SPESİFİK ROTA (Kategori ID'si içeren)
-// Bu her zaman en üstte olmalı ki sistem 2. parametreyi (ID) yakalayabilsin.
+// En spesifik rota EN ÜSTTE
 $routes->get('products/list/(:any)/(:any)', 'ProductController::listByCategory/$1/$2');
 
-// 2. ADIM: GENEL TİP ROTASI (Sadece basili/dijital)
-// Eğer URL'de 2. parametre yoksa sistem buraya düşer.
+// Tip bazlı liste
 $routes->get('products/list/(:any)', 'ProductController::listByType/$1');
 
-// 3. ADIM: DİĞERLERİ
+// Diğerleri
 $routes->get('products/selection', 'ProductController::selection');
-$routes->get('products', 'ProductController::index');
 
-// Düzenleme formunu açan rota (GET)
+// Edit & Update
 $routes->get('products/edit/(:num)', 'ProductController::edit/$1');
-// Formdan gelen verileri veritabanına kaydeden rota (POST)
 $routes->post('products/update', 'ProductController::update');
 
-$routes->get('products/stock-management', 'ProductController::stock_management');
+// ----------------------------------------------------
+// ADMIN ALANI – SADECE ADMIN
+// ----------------------------------------------------
+$routes->group('admin', ['filter' => 'role:admin'], function ($routes) {
 
-$routes->get('orders', 'OrderController::index');
-$routes->post('orders/create', 'OrderController::create');
-
-$routes->group('admin', ['filter' => 'role:admin'], function($routes) {
+    // Admin Dashboard
     $routes->get('dashboard', 'Admin\Dashboard::index');
+
+    // (ileride)
+    // $routes->get('users', 'Admin\Users::index');
+    // $routes->get('roles', 'Admin\Roles::index');
 });
 
-$routes->group('admin', ['filter' => 'role:admin,secretary'], function($routes) {
+// ----------------------------------------------------
+// ADMIN + SECRETARY – SİPARİŞ YÖNETİMİ
+// ----------------------------------------------------
+$routes->group('admin', ['filter' => 'role:admin,secretary|perm:manage_orders'], function ($routes) {
+
     $routes->get('orders', 'Admin\Orders::index');
 });
 
+// ----------------------------------------------------
+// ADMIN + PERMISSION – ÜRÜN YÖNETİMİ
+// ----------------------------------------------------
 $routes->get(
     'admin/products',
     'Admin\Products::index',

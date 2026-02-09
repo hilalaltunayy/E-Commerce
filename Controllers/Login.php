@@ -36,7 +36,7 @@ class Login extends BaseController
             $session->set('isLoggedIn', true);
 
             $session->set('userData', [
-                'id'    => $user['id'],
+                'id'    => (string) $user['id'],
                 'name'  => $user['username'],
                 'email' => $user['email']
             ]);

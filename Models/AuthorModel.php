@@ -2,14 +2,12 @@
 
 namespace App\Models;
 
-class UserModel extends BaseUuidModel
+class AuthorModel extends BaseUuidModel
 {
-    protected $table         = 'users';
-    protected $primaryKey    = 'id';
+    protected $table         = 'authors';
     protected $returnType    = 'array';
     protected $allowedFields = [
-        'id','username','email','password','role','status',
-        'created_at','updated_at','deleted_at'
+        'id','name','bio','created_at','updated_at','deleted_at'
     ];
 
     protected $useSoftDeletes = true;

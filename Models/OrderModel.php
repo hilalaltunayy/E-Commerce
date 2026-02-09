@@ -2,24 +2,16 @@
 
 namespace App\Models;
 
-class ProductModel extends BaseUuidModel
+class OrderModel extends BaseUuidModel
 {
-    protected $table         = 'products';
+    protected $table         = 'orders';
     protected $returnType    = 'array';
     protected $allowedFields = [
         'id',
-        'author_id',
-        'type_id',
-        'category_id',
-        'product_name',
-        'author',
-        'description',
-        'price',
-        'stock_count',
-        'type',
-        'image',
-        'is_active',
-        'stock',
+        'product_id',
+        'quantity',
+        'total_price',
+        'order_date',
         'created_at',
         'updated_at',
         'deleted_at',

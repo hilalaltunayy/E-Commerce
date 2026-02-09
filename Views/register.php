@@ -103,7 +103,7 @@
     <form action="<?= base_url('register/save') ?>" method="post">
         <div class="mb-1">
             <label class="form-label small text-muted">Adınız Soyadınız</label>
-            <input type="text" name="name" class="form-control" placeholder="Örn: Hilal Altunay" required>
+            <input type="text" name="username" class="form-control" placeholder="Örn: Hilal Altunay" required>
         </div>
         
         <div class="mb-1">
