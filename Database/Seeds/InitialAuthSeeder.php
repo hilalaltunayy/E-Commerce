@@ -44,6 +44,30 @@ class InitialAuthSeeder extends Seeder
                 'status'   => 'active',
             ]);
         }
+
+       // 5) Secretary user oluştur
+        $existingSec = $users->where('email', 'secretary@site.com')->first();
+        if (!$existingSec) {
+            $users->insert([
+                'username' => 'secretary',
+                'email'    => 'secretary@site.com',
+                'password' => password_hash('123456', PASSWORD_DEFAULT),
+                'role'     => 'secretary',
+                'status'   => 'active',
+            ]);
+        }
+
+        // 6) Normal user (opsiyonel)
+        $existingUser = $users->where('email', 'user@site.com')->first();
+        if (!$existingUser) {
+            $users->insert([
+                'username' => 'user',
+                'email'    => 'user@site.com',
+                'password' => password_hash('123456', PASSWORD_DEFAULT),
+                'role'     => 'user',
+                'status'   => 'active',
+            ]);
+}
     }
 
     private function firstOrCreateRole(RoleModel $roles, string $name, string $desc): string

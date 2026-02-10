@@ -34,11 +34,13 @@ class Login extends BaseController
             // BAŞARILI: Tüm ceza sayaçlarını sıfırla ve içeri al
             $session->remove(['login_errors', 'last_attempt_time', 'current_wait_time']);
             $session->set('isLoggedIn', true);
+            //session()->set('user', $userArray);
 
-            $session->set('userData', [
+            $session->set('user', [
                 'id'    => (string) $user['id'],
-                'name'  => $user['username'],
-                'email' => $user['email']
+                'role'  => (string) $user['role'],
+                'email' => (string) $user['email'],
+                'name'  => (string) ($user['username'] ?? ''),
             ]);
 
             // ✅ RoleFilter'ın beklediği alanlar

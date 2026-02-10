@@ -14,6 +14,8 @@ use CodeIgniter\Filters\InvalidChars;
 use CodeIgniter\Filters\PageCache;
 use CodeIgniter\Filters\PerformanceMetrics;
 use CodeIgniter\Filters\SecureHeaders;
+use CodeIgniter\Config\Services;
+use CodeIgniter\Roter\RouteCollection;
 
 class Filters extends BaseFilters
 {
@@ -27,17 +29,22 @@ class Filters extends BaseFilters
      * or [filter_name => [classname1, classname2, ...]]
      */
     public array $aliases = [
-        'csrf'          => \CodeIgniter\Filters\CSRF::class,
-        'toolbar'       => \CodeIgniter\Filters\DebugToolbar::class,
-        'honeypot'      => \CodeIgniter\Filters\Honeypot::class,
-        'invalidchars'  => \CodeIgniter\Filters\InvalidChars::class,
-        'secureheaders' => \CodeIgniter\Filters\SecureHeaders::class,
-        'auth'          => \App\Filters\AuthFilter::class,
-        'cors'          => Cors::class,
-        'forcehttps'    => ForceHTTPS::class,
-        'pagecache'     => PageCache::class,
-        'performance'   => PerformanceMetrics::class,
+       
         
+            'auth' => \App\Filters\AuthFilter::class,
+            'role' => \App\Filters\RoleFilter::class,
+            'perm' => \App\Filters\PermissionFilter::class,
+            'csrf'          => \CodeIgniter\Filters\CSRF::class,
+            'toolbar'       => \CodeIgniter\Filters\DebugToolbar::class,
+            'honeypot'      => \CodeIgniter\Filters\Honeypot::class,
+            'invalidchars'  => \CodeIgniter\Filters\InvalidChars::class,
+            'secureheaders' => \CodeIgniter\Filters\SecureHeaders::class,
+            'auth'          => \App\Filters\AuthFilter::class,
+            'cors'          => Cors::class,
+            'forcehttps'    => ForceHTTPS::class,
+            'pagecache'     => PageCache::class,
+            'performance'   => PerformanceMetrics::class,
+            
     ];
     
 

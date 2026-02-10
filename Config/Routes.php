@@ -88,8 +88,6 @@ $routes->group('admin', ['filter' => 'role:admin,secretary|perm:manage_orders'],
 // ----------------------------------------------------
 // ADMIN + PERMISSION – ÜRÜN YÖNETİMİ
 // ----------------------------------------------------
-$routes->get(
-    'admin/products',
-    'Admin\Products::index',
-    ['filter' => 'role:admin,secretary|perm:manage_products']
-);
+$routes->group('admin', ['filter' => 'role:admin,secretary|perm:manage_products'], function ($routes) {
+    $routes->get('products', 'Admin\Products::index');
+});

@@ -12,12 +12,17 @@ class RoleFilter implements FilterInterface
     public function before(RequestInterface $request, $arguments = null)
     {
         $session = session();
+        // login yapmamışsa
+        $user = $session->get('user');
+        if (!$user) {
+            return redirect()->to(base_url('login'));
+        }
 
-        $role   = (string) $session->get('role');
-        $userId = (string) $session->get('user_id'); // UUID string
+        $role   = is_array($user) ? (string)($user['role'] ?? '') : '';
+        $userId = is_array($user) ? (string)($user['id'] ?? ($user['user_id'] ?? '')) : '';
 
         if ($userId === '' || $role === '') {
-            return redirect()->to('/login');
+           return redirect()->to(base_url('login'));
         }
 
         // Argüman parse: ör. ['admin|perm:manage_products'] veya ['admin,secretary']
@@ -58,28 +63,14 @@ class RoleFilter implements FilterInterface
         // Permission check (opsiyonel)
         if (!empty($requiredPerm)) {
 
-            // Admin her şeyi geçsin (istersen kaldırırız)
+            // Admin her şeyi geçsin
             if ($role === 'admin') {
-                return;
+                return null;
             }
 
-            // Secretary: user_permissions override tablosundan bak
-        if ($role === 'secretary') {
             $upm = new UserPermissionModel();
 
-            $allowed = $upm->isAllowed((int)$userId, $requiredPerm);
-                if (!$allowed) {
-                    return $this->deny($request);
-                }
-
-                return;
-            }
-
-          
-  
-            $upm = new UserPermissionModel();
-
-            // UUID -> string gönderiyoruz
+            // UUID string gönder
             $allowed = $upm->isAllowed($userId, $requiredPerm);
 
             if (!$allowed) {
@@ -87,7 +78,6 @@ class RoleFilter implements FilterInterface
             }
         }
 
-        return;
     }
 
     public function after(RequestInterface $request, ResponseInterface $response, $arguments = null)
