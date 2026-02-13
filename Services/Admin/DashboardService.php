@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Services\Admin;
+helper(['dashboard_date', 'dashboard_series']);
 
 use App\DTO\Admin\{
     AdminNoteDTO,
@@ -17,55 +18,35 @@ use CodeIgniter\Database\BaseConnection;
 
 class DashboardService
 {
-    public function __construct(
-        private BaseConnection $db
-    ) {}
+    public function __construct(private BaseConnection $db) {}
 
     public function getDashboard(): DashboardDTO
     {
-        // 1) Sipariş metrikleri
         $totalOrders   = $this->countOrders();
-        $todayOrders   = $this->countOrdersBetween($this->todayStart(), $this->todayEnd());
-        $weekOrders    = $this->countOrdersBetween($this->weekStart(), $this->todayEnd());
+        $todayOrders   = $this->countOrdersBetween(dash_today_start(), dash_today_end());
+        $weekOrders    = $this->countOrdersBetween(dash_week_start(), dash_today_end());
         $pendingOrders = $this->countOrdersByStatus('pending');
-
         $orderCards = [
             new MetricCardDTO('Toplam Sipariş', $totalOrders),
             new MetricCardDTO('Bugün Sipariş', $todayOrders),
             new MetricCardDTO('Bu Hafta Sipariş', $weekOrders),
             new MetricCardDTO('Bekleyen Sipariş', $pendingOrders),
         ];
-
-        // 2) Son 5 sipariş
+           
         $latestOrders = $this->getLatestOrders(5);
-
-        // 3) Grafikler: sipariş çizgi + bar (ör: son 14 gün günlük)
         $ordersLineSeries = $this->getOrdersDailySeries(14);
-        $ordersBarSeries  = $this->getOrdersDailySeries(14); // aynı seriyle başlayalım, view’da bar/line seçersin
-
-        // 4) Ciro tablosu (günlük/haftalık/aylık)
+        $ordersBarSeries  = $ordersLineSeries;
         $revenueTable = $this->getRevenueTable();
 
-        // 5) Ziyaret sayısı kartı + karşılaştırmalı seri
         $visitCard = $this->getVisitCard();
-        $visitsCompareSeries = $this->getVisitsCompareSeries(14); // son 14 gün
+        $visitsCompareSeries = $this->getVisitsCompareSeries(14);
 
-        // 6) En çok hangi kategoride satış (% pie)
         $topCategoryPie = $this->getTopCategoryPie(6);
-
-        // 7) En çok hangi yazar
         $topAuthors = $this->getTopAuthors(10);
-
-        // 8) En çok hangi dijital kitap satılmış
         $topDigitalBooks = $this->getTopDigitalBooks(10);
 
-        // 9) Yeni kullanıcı (günlük/haftalık/aylık)
         $newUserCards = $this->getNewUserCards();
-
-        // 10) Log tablosu (son güncellemeler)
         $latestLogs = $this->getLatestAuditLogs(15);
-
-        // 11) Notlarım
         $notes = $this->getAdminNotes(20);
 
         return new DashboardDTO(
@@ -96,12 +77,12 @@ class DashboardService
 
     private function countOrders(): int
     {
-        return (int) $this->db->table('orders')->countAllResults();
+        return (int)$this->db->table('orders')->countAllResults();
     }
 
     private function countOrdersBetween(string $start, string $end): int
     {
-        return (int) $this->db->table('orders')
+        return (int)$this->db->table('orders')
             ->where('created_at >=', $start)
             ->where('created_at <=', $end)
             ->countAllResults();
@@ -109,7 +90,7 @@ class DashboardService
 
     private function countOrdersByStatus(string $status): int
     {
-        return (int) $this->db->table('orders')
+        return (int)$this->db->table('orders')
             ->where('status', $status)
             ->countAllResults();
     }
@@ -119,32 +100,32 @@ class DashboardService
      */
     private function getLatestOrders(int $limit = 5): array
     {
-        $rows = $this->db->table('orders')
-            ->select('id, customer_name, total_amount, status, created_at')
-            ->orderBy('id', 'DESC')
+        // products join (opsiyonel): ürün adını göstermek için
+        $rows = $this->db->table('orders o')
+            ->select('o.id, o.customer_name, o.total_amount, o.status, o.created_at, p.product_name')
+            ->join('products p', 'p.id = o.product_id', 'left')
+            ->orderBy('o.id', 'DESC')
             ->limit($limit)
             ->get()
             ->getResultArray();
 
         return array_map(fn($r) => new OrderListItemDTO(
             id: (int)$r['id'],
-            customerName: (string)($r['customer_name'] ?? '-'),
+            customerName: (string)($r['customer_name'] ?? ('Order #' . $r['id'])),
             totalAmount: (float)($r['total_amount'] ?? 0),
-            status: (string)($r['status'] ?? '-'),
+            status: (string)(($r['status'] ?? '-') . (isset($r['product_name']) ? ' • ' . $r['product_name'] : '')),
             createdAt: (string)($r['created_at'] ?? '-'),
         ), $rows);
     }
 
     /**
-     * Son N gün için günlük sipariş adedi serisi
      * @return ChartPointDTO[]
      */
     private function getOrdersDailySeries(int $days = 14): array
     {
         $start = date('Y-m-d 00:00:00', strtotime("-" . ($days - 1) . " days"));
-        $end   = $this->todayEnd();
+        $end   = dash_today_end();
 
-        // MySQL varsayımı: DATE(created_at)
         $rows = $this->db->table('orders')
             ->select('DATE(created_at) as d, COUNT(*) as c')
             ->where('created_at >=', $start)
@@ -154,18 +135,12 @@ class DashboardService
             ->get()
             ->getResultArray();
 
-        // boş günleri de dolduralım
         $map = [];
         foreach ($rows as $r) {
             $map[$r['d']] = (int)$r['c'];
         }
 
-        $series = [];
-        for ($i = $days - 1; $i >= 0; $i--) {
-            $d = date('Y-m-d', strtotime("-{$i} days"));
-            $series[] = new ChartPointDTO($d, (float)($map[$d] ?? 0));
-        }
-        return $series;
+        return dash_fill_daily_series($map, $days);
     }
 
     /* -------------------------
@@ -174,9 +149,9 @@ class DashboardService
 
     private function getRevenueTable(): RevenueTableDTO
     {
-        $daily  = $this->sumRevenueBetween($this->todayStart(), $this->todayEnd());
-        $weekly = $this->sumRevenueBetween($this->weekStart(), $this->todayEnd());
-        $monthly= $this->sumRevenueBetween($this->monthStart(), $this->todayEnd());
+        $daily  = $this->sumRevenueBetween(dash_today_start(), dash_today_end());
+        $weekly = $this->sumRevenueBetween(dash_week_start(), dash_today_end());
+        $monthly= $this->sumRevenueBetween(dash_month_start(), dash_today_end());
 
         $rows = [
             new RevenueRowDTO('Bugün', $daily),
@@ -184,9 +159,7 @@ class DashboardService
             new RevenueRowDTO('Bu Ay', $monthly),
         ];
 
-        // Stil: admin ayarlayabilsin diye settings tablosundan okuyacağız.
         $style = $this->getRevenueTableStyleFromSettings();
-
         return new RevenueTableDTO($rows, $style);
     }
 
@@ -196,7 +169,7 @@ class DashboardService
             ->select('COALESCE(SUM(total_amount),0) as total')
             ->where('created_at >=', $start)
             ->where('created_at <=', $end)
-            ->where('status !=', 'cancelled') // örnek: iptali hariç tutmak istersen
+            ->where('status !=', 'cancelled')
             ->get()
             ->getRowArray();
 
@@ -205,8 +178,6 @@ class DashboardService
 
     private function getRevenueTableStyleFromSettings(): array
     {
-        // Önerilen tablo: admin_settings (key, value)
-        // key ör: revenue_table_header_bg, revenue_table_header_text, revenue_table_row_odd_bg ...
         $defaults = [
             'headerBg' => '#111827',
             'headerText' => '#ffffff',
@@ -227,7 +198,6 @@ class DashboardService
             $k = (string)$r['setting_key'];
             $v = (string)$r['setting_value'];
 
-            // mapping
             if ($k === 'revenue_table_header_bg') $style['headerBg'] = $v;
             if ($k === 'revenue_table_header_text') $style['headerText'] = $v;
             if ($k === 'revenue_table_row_odd_bg') $style['rowOddBg'] = $v;
@@ -242,11 +212,9 @@ class DashboardService
 
     private function getVisitCard(): MetricCardDTO
     {
-        // Önerilen tablo: visits (id, visited_at, path, user_id nullable, session_id, referrer, ...)
-        $today = $this->countVisitsBetween($this->todayStart(), $this->todayEnd());
-        $yesterdayStart = date('Y-m-d 00:00:00', strtotime('-1 day'));
-        $yesterdayEnd   = date('Y-m-d 23:59:59', strtotime('-1 day'));
-        $yesterday = $this->countVisitsBetween($yesterdayStart, $yesterdayEnd);
+        $today = $this->countVisitsBetween(dash_today_start(), dash_today_end());
+        [$yStart, $yEnd] = dash_yesterday_range();
+        $yesterday = $this->countVisitsBetween($yStart, $yEnd);
 
         $deltaPct = null;
         $trend = 'flat';
@@ -266,20 +234,19 @@ class DashboardService
 
     private function countVisitsBetween(string $start, string $end): int
     {
-        return (int) $this->db->table('visits')
+        return (int)$this->db->table('visits')
             ->where('visited_at >=', $start)
             ->where('visited_at <=', $end)
             ->countAllResults();
     }
 
     /**
-     * @return ChartPointDTO[] (ör: bugün serisi / önceki dönem serisi gibi view’da kıyaslayabilirsin)
+     * @return ChartPointDTO[]
      */
     private function getVisitsCompareSeries(int $days = 14): array
     {
-        // Basit hali: son N gün günlük ziyaret sayısı
         $start = date('Y-m-d 00:00:00', strtotime("-" . ($days - 1) . " days"));
-        $end   = $this->todayEnd();
+        $end   = dash_today_end();
 
         $rows = $this->db->table('visits')
             ->select('DATE(visited_at) as d, COUNT(*) as c')
@@ -291,38 +258,25 @@ class DashboardService
             ->getResultArray();
 
         $map = [];
-        foreach ($rows as $r) {
-            $map[$r['d']] = (int)$r['c'];
-        }
+        foreach ($rows as $r) $map[$r['d']] = (int)$r['c'];
 
-        $series = [];
-        for ($i = $days - 1; $i >= 0; $i--) {
-            $d = date('Y-m-d', strtotime("-{$i} days"));
-            $series[] = new ChartPointDTO($d, (float)($map[$d] ?? 0));
-        }
-        return $series;
+        return dash_fill_daily_series($map, $days);
     }
 
     /* -------------------------
-     * TOP CATEGORY PIE
+     * TOP CATEGORY PIE (orders üzerinden)
      * ------------------------- */
 
     /**
-     * Varsayım:
-     * order_items: (order_id, product_id, quantity, unit_price)
-     * products: (id, category_id, author_id, is_digital)
-     * categories: (id, name)
-     *
      * @return PieSliceDTO[]
      */
     private function getTopCategoryPie(int $limit = 6): array
     {
-        // En çok satılan kategori: quantity toplamı üzerinden
-        $rows = $this->db->table('order_items oi')
-            ->select('c.name as category_name, SUM(oi.quantity) as qty')
-            ->join('products p', 'p.id = oi.product_id')
+        $rows = $this->db->table('orders o')
+            ->select('c.category_name as category_name, SUM(o.quantity) as qty')
+            ->join('products p', 'p.id = o.product_id', 'left')
             ->join('categories c', 'c.id = p.category_id', 'left')
-            ->groupBy('c.name')
+            ->groupBy('c.category_name')
             ->orderBy('qty', 'DESC')
             ->limit($limit)
             ->get()
@@ -344,19 +298,14 @@ class DashboardService
         return $out;
     }
 
-    /* -------------------------
-     * TOP AUTHORS
-     * ------------------------- */
-
     /**
-     * authors: (id, name)
      * @return array<int, array{label:string,value:int}>
      */
     private function getTopAuthors(int $limit = 10): array
     {
-        $rows = $this->db->table('order_items oi')
-            ->select('a.name as author_name, SUM(oi.quantity) as qty')
-            ->join('products p', 'p.id = oi.product_id')
+        $rows = $this->db->table('orders o')
+            ->select('a.name as author_name, SUM(o.quantity) as qty')
+            ->join('products p', 'p.id = o.product_id', 'left')
             ->join('authors a', 'a.id = p.author_id', 'left')
             ->groupBy('a.name')
             ->orderBy('qty', 'DESC')
@@ -370,21 +319,18 @@ class DashboardService
         ], $rows);
     }
 
-    /* -------------------------
-     * TOP DIGITAL BOOKS
-     * ------------------------- */
-
     /**
-     * products: (id, title, is_digital)
+     * Burada dijital tanımı sende net değil.
+     * Şimdilik products.type = 'digital' varsayımıyla bıraktım.
      * @return array<int, array{label:string,value:int}>
      */
     private function getTopDigitalBooks(int $limit = 10): array
     {
-        $rows = $this->db->table('order_items oi')
-            ->select('p.title as title, SUM(oi.quantity) as qty')
-            ->join('products p', 'p.id = oi.product_id')
-            ->where('p.is_digital', 1)
-            ->groupBy('p.title')
+        $rows = $this->db->table('orders o')
+            ->select('p.product_name as title, SUM(o.quantity) as qty')
+            ->join('products p', 'p.id = o.product_id', 'left')
+            ->where('p.type', 'digital')
+            ->groupBy('p.product_name')
             ->orderBy('qty', 'DESC')
             ->limit($limit)
             ->get()
@@ -401,14 +347,13 @@ class DashboardService
      * ------------------------- */
 
     /**
-     * users: (id, created_at, ...)
      * @return MetricCardDTO[]
      */
     private function getNewUserCards(): array
     {
-        $daily  = $this->countUsersBetween($this->todayStart(), $this->todayEnd());
-        $weekly = $this->countUsersBetween($this->weekStart(), $this->todayEnd());
-        $monthly= $this->countUsersBetween($this->monthStart(), $this->todayEnd());
+        $daily  = $this->countUsersBetween(dash_today_start(), dash_today_end());
+        $weekly = $this->countUsersBetween(dash_week_start(), dash_today_end());
+        $monthly= $this->countUsersBetween(dash_month_start(), dash_today_end());
 
         return [
             new MetricCardDTO('Yeni Kullanıcı (Bugün)', $daily),
@@ -419,20 +364,17 @@ class DashboardService
 
     private function countUsersBetween(string $start, string $end): int
     {
-        return (int) $this->db->table('users')
+        return (int)$this->db->table('users')
             ->where('created_at >=', $start)
             ->where('created_at <=', $end)
             ->countAllResults();
     }
 
     /* -------------------------
-     * AUDIT LOGS (Son güncellemeler)
+     * AUDIT LOGS
      * ------------------------- */
 
     /**
-     * audit_logs: (id, actor_id, actor_role, action, entity_type, entity_id, meta_json, created_at)
-     * users: (id, name)
-     *
      * @return AuditLogItemDTO[]
      */
     private function getLatestAuditLogs(int $limit = 15): array
@@ -462,15 +404,12 @@ class DashboardService
      * ------------------------- */
 
     /**
-     * admin_notes: (id, admin_id, note, created_at, updated_at)
      * @return AdminNoteDTO[]
      */
     private function getAdminNotes(int $limit = 20): array
     {
-        // Şimdilik: admin_id filtrelemesini controller’dan session ile geçeriz.
-        // Burada "tüm notlar" gibi bıraktım.
         $rows = $this->db->table('admin_notes')
-            ->select('id, note, created_at, updated_at')
+            ->select('id, admin_id, note, created_at, updated_at')
             ->orderBy('id', 'DESC')
             ->limit($limit)
             ->get()
@@ -482,24 +421,5 @@ class DashboardService
             createdAt: (string)($r['created_at'] ?? '-'),
             updatedAt: $r['updated_at'] ?? null
         ), $rows);
-    }
-
-    /* -------------------------
-     * DATE HELPERS
-     * ------------------------- */
-
-    private function todayStart(): string { return date('Y-m-d 00:00:00'); }
-    private function todayEnd(): string   { return date('Y-m-d 23:59:59'); }
-
-    private function weekStart(): string
-    {
-        // Pazartesi başlangıç (TR için mantıklı)
-        $ts = strtotime('monday this week');
-        return date('Y-m-d 00:00:00', $ts);
-    }
-
-    private function monthStart(): string
-    {
-        return date('Y-m-01 00:00:00');
     }
 }
